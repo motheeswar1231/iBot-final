@@ -3,8 +3,13 @@ package com.example.service;
 import com.example.model.Invoice;
 import com.example.model.InvoiceDetails;
 import com.example.repository.InvoiceRepository;
+import org.opencv.core.Mat;
+import org.opencv.imgcodecs.Imgcodecs;
+import org.opencv.imgproc.Imgproc;
 import org.springframework.stereotype.Service;
 
+import java.io.File;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -19,20 +24,42 @@ public class InvoiceParserService {
         this.invoiceRepository = invoiceRepository;
     }
 
+    public File preprocessImage(File file) throws Exception {
+
+        Mat img = Imgcodecs.imread(file.getAbsolutePath());
+
+        Mat gray = new Mat();
+        Imgproc.cvtColor(img, gray, Imgproc.COLOR_BGR2GRAY);
+
+        Mat threshold = new Mat();
+        Imgproc.threshold(gray, threshold, 150, 255, Imgproc.THRESH_BINARY);
+
+        File processed = new File("processed.png");
+        Imgcodecs.imwrite(processed.getAbsolutePath(), threshold);
+
+        return processed;
+    }
+
     public Invoice parseAIInvoice(String text) {
 
         Invoice invoice = new Invoice();
 
         invoice.setCompanyName(extractCompanyName(text));
         invoice.setSeller(extractAddress(text));
+        invoice.setSystemInvoiceNumber(generateInvoiceNumber());
         invoice.setInvoiceNumber(extractBillNumber(text));
         invoice.setInvoiceDate(extractInvoiceDate(text));
         invoice.setTotalAmount(extractTotalAmount(text));
+        invoice.setCreatedDate(LocalDate.now());
 
         List<InvoiceDetails> items = extractItems(text);
         invoice.setInvoiceDetails(items);
 
         return invoiceRepository.save(invoice);
+    }
+    private String generateInvoiceNumber() {
+        int random = (int) (Math.random() * 100000);
+        return "INV-" + random;
     }
 
     private List<InvoiceDetails> extractItems(String text){
@@ -115,8 +142,5 @@ public class InvoiceParserService {
 
         return max;
     }
-
-
-
 
 }

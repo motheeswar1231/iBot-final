@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import java.time.LocalDate;
 import java.util.List;
 
 
@@ -14,6 +15,9 @@ public class Invoice {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(name="system_invoice_number")
+    private String systemInvoiceNumber;
 
     @Column(name = "company_name")
     private String companyName;
@@ -30,12 +34,29 @@ public class Invoice {
     @Column(name = "total_amount")
     private double totalAmount;
 
+    @Column(name = "created_date")
+    private LocalDate createdDate;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "item_details", columnDefinition = "jsonb")
     private List<InvoiceDetails> invoiceDetails;
 
+    public LocalDate getCreatedDate() {
+        return createdDate;
+    }
+    public void setCreatedDate(LocalDate createdDate) {
+        this.createdDate = createdDate;
+    }
     public List<InvoiceDetails> getInvoiceDetails() {
         return invoiceDetails;
+    }
+
+    public String getSystemInvoiceNumber() {
+        return systemInvoiceNumber;
+    }
+
+    public void setSystemInvoiceNumber(String systemInvoiceNumber) {
+        this.systemInvoiceNumber = systemInvoiceNumber;
     }
 
     public void setInvoiceDetails(List<InvoiceDetails> invoiceDetails) {
