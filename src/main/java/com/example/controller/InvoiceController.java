@@ -70,4 +70,16 @@ public class InvoiceController {
         );
         return invoices;
     }
+    @GetMapping("/invoices/{invoiceNumber}")
+    public List<Invoice> getInvoiceByNumber(@PathVariable String invoiceNumber){
+
+        List<Invoice> invoices = invoiceRepository.findByInvoiceNumber(invoiceNumber);
+
+        invoices.forEach(i ->
+                System.out.println("Filtered -> ID: " + i.getId() +
+                        " InvoiceNumber: " + i.getInvoiceNumber())
+        );
+
+        return invoices;
+    }
 }
