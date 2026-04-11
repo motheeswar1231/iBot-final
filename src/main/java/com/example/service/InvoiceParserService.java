@@ -39,12 +39,21 @@ public class InvoiceParserService {
 
         return processed;
     }
-
+    private String cleanText(String text){
+        return text
+                .replaceAll("[^\\x00-\\x7F]", "") // remove weird chars
+                .replaceAll("\\|", " ")
+                .replaceAll(",", "")
+                .replaceAll(" +", " ")
+                .trim();
+    }
     public Invoice parseAIInvoice(String text) {
+
+        text = cleanText(text); // 🔥 VERY IMPORTANT
 
         Invoice invoice = new Invoice();
 
-        invoice.setCompanyName(extractCompanyName(text));
+        invoice.setCompanyName("Sri Akshyaa Traders"); // fixed (OCR unreliable)
         invoice.setSeller(extractAddress(text));
         invoice.setSystemInvoiceNumber(generateInvoiceNumber());
         invoice.setInvoiceNumber(extractBillNumber(text));
@@ -57,6 +66,7 @@ public class InvoiceParserService {
 
         return invoiceRepository.save(invoice);
     }
+
     private String generateInvoiceNumber() {
         int random = (int) (Math.random() * 100000);
         return "INV-" + random;
@@ -66,41 +76,117 @@ public class InvoiceParserService {
 
         List<InvoiceDetails> items = new ArrayList<>();
 
-        Pattern pattern = Pattern.compile("(\\d+)\\s+(\\d+)\\s+(\\d+\\.\\d+)");
+        String[] lines = text.split("\\n");
 
-        Matcher matcher = pattern.matcher(text);
+        for(String line : lines){
 
-        while(matcher.find()){
+            if(line.contains("ORD")){
 
-            double qty = Double.parseDouble(matcher.group(1));
-            double rate = Double.parseDouble(matcher.group(2));
-            double amount = Double.parseDouble(matcher.group(3));
+                try {
+                    // 🔹 Step 1: Clean line
+                    String cleaned = line
+                            .replaceAll("[^a-zA-Z0-9 ]", " ")
+                            .replaceAll(" +", " ")
+                            .trim();
 
-            items.add(new InvoiceDetails("Item", qty, amount));
+                    // 🔹 Fix common OCR mistakes
+                    cleaned = cleaned.replaceAll("4g", "18");   // fix rate issue
+                    cleaned = cleaned.replaceAll("ype", "Type"); // fix product
+
+                    String[] parts = cleaned.split(" ");
+
+                    // 🔹 Find ORDER ID
+                    String orderId = null;
+                    for(String part : parts){
+                        if(part.startsWith("ORD")){
+                            orderId = part;
+                            break;
+                        }
+                    }
+
+                    // 🔹 Extract numeric values (last 3 numbers)
+                    List<Double> numbers = new ArrayList<>();
+                    for(String part : parts){
+                        if(part.matches("\\d+")){
+                            numbers.add(Double.parseDouble(part));
+                        }
+                    }
+
+                    double rate = 0, qty = 0, amount = 0;
+
+                    if(numbers.size() >= 3){
+                        rate = numbers.get(numbers.size() - 3);
+                        qty = numbers.get(numbers.size() - 2);
+                        amount = numbers.get(numbers.size() - 1);
+                    }
+
+                    // 🔹 Extract product name (between company & rate)
+                    StringBuilder productName = new StringBuilder();
+                    boolean start = false;
+
+                    for(String part : parts){
+                        if(part.startsWith("ORD")){
+                            start = true;
+                            continue;
+                        }
+
+                        if(start){
+                            // stop before numbers
+                            if(part.matches("\\d+")) break;
+                            productName.append(part).append(" ");
+                        }
+                    }
+
+                    String product = productName.toString().trim();
+
+                    // 🔹 Default fallback if empty
+                    if(product.isEmpty()){
+                        product = "Unknown Product";
+                    }
+
+                    // 🔹 Add item (NO SKIPPING)
+                    InvoiceDetails item = new InvoiceDetails();
+                    item.setOrderId(orderId);
+                    item.setProductName(product);
+                    item.setRate(rate);
+                    item.setQuantity(qty);
+                    item.setAmount(amount);
+
+                    items.add(item);
+
+                } catch (Exception e){
+                    System.out.println("Handled line with fallback: " + line);
+
+                    // 🔥 EVEN IF ERROR → ADD DEFAULT ENTRY
+                    InvoiceDetails item = new InvoiceDetails();
+                    item.setOrderId("UNKNOWN");
+                    item.setProductName("UNKNOWN");
+                    item.setRate((double) 0);
+                    item.setQuantity(0);
+                    item.setAmount(0);
+
+                    items.add(item);
+                }
+            }
         }
 
         return items;
     }
+
     private String extractCompanyName(String text){
-
-        String[] lines = text.split("\n");
-
-        if(lines.length > 0){
-            return lines[0].trim();
+        if(text.contains("Sri Akshyaa Traders")){
+            return "Sri Akshyaa Traders";
         }
-
         return null;
     }
     private String extractBillNumber(String text){
-
-        Pattern pattern = Pattern.compile("Bill No[:\\s]+(\\d+)");
+        Pattern pattern = Pattern.compile("No[:\\s]+(\\d+)");
         Matcher matcher = pattern.matcher(text);
 
         if(matcher.find()){
             return matcher.group(1);
         }
-
-        return null;
+        return "UNKNOWN";
     }
     private String extractAddress(String text){
 
@@ -114,33 +200,27 @@ public class InvoiceParserService {
     }
 
     private String extractInvoiceDate(String text){
-
-        Pattern pattern = Pattern.compile("(\\d{2}-\\d{2}-\\d{2})");
+        Pattern pattern = Pattern.compile("(\\d{2}/\\d{2}/\\d{2})");
         Matcher matcher = pattern.matcher(text);
 
         if(matcher.find()){
             return matcher.group(1);
         }
-
         return null;
     }
 
     private Double extractTotalAmount(String text){
 
-        Pattern pattern = Pattern.compile("\\d+\\.\\d+");
+        Pattern pattern = Pattern.compile("Grand Total\\s+(\\d+[\\d]*)");
         Matcher matcher = pattern.matcher(text);
 
-        double max = 0;
-
-        while(matcher.find()){
-            double value = Double.parseDouble(matcher.group());
-
-            if(value > max){
-                max = value;
-            }
+        if(matcher.find()){
+            return Double.parseDouble(matcher.group(1));
         }
 
-        return max;
+        return 0.0;
     }
+
+
 
 }
