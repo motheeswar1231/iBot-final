@@ -83,71 +83,49 @@ public class InvoiceParserService {
             if(line.contains("ORD")){
 
                 try {
-                    // 🔹 Step 1: Clean line
+
                     String cleaned = line
                             .replaceAll("[^a-zA-Z0-9 ]", " ")
                             .replaceAll(" +", " ")
                             .trim();
 
-                    // 🔹 Fix common OCR mistakes
-                    cleaned = cleaned.replaceAll("4g", "18");   // fix rate issue
-                    cleaned = cleaned.replaceAll("ype", "Type"); // fix product
-
                     String[] parts = cleaned.split(" ");
 
-                    // 🔹 Find ORDER ID
                     String orderId = null;
+                    List<Double> numbers = new ArrayList<>();
+                    StringBuilder product = new StringBuilder();
+
+                    boolean afterOrder = false;
+
                     for(String part : parts){
+
                         if(part.startsWith("ORD")){
                             orderId = part;
-                            break;
+                            afterOrder = true;
+                            continue;
                         }
-                    }
 
-                    // 🔹 Extract numeric values (last 3 numbers)
-                    List<Double> numbers = new ArrayList<>();
-                    for(String part : parts){
-                        if(part.matches("\\d+")){
-                            numbers.add(Double.parseDouble(part));
+                        if(afterOrder){
+
+                            if(part.matches("\\d+")){
+                                numbers.add(Double.parseDouble(part));
+                            } else {
+                                product.append(part).append(" ");
+                            }
                         }
                     }
 
                     double rate = 0, qty = 0, amount = 0;
 
                     if(numbers.size() >= 3){
-                        rate = numbers.get(numbers.size() - 3);
-                        qty = numbers.get(numbers.size() - 2);
-                        amount = numbers.get(numbers.size() - 1);
+                        rate = numbers.get(0);
+                        qty = numbers.get(1);
+                        amount = numbers.get(2);
                     }
 
-                    // 🔹 Extract product name (between company & rate)
-                    StringBuilder productName = new StringBuilder();
-                    boolean start = false;
-
-                    for(String part : parts){
-                        if(part.startsWith("ORD")){
-                            start = true;
-                            continue;
-                        }
-
-                        if(start){
-                            // stop before numbers
-                            if(part.matches("\\d+")) break;
-                            productName.append(part).append(" ");
-                        }
-                    }
-
-                    String product = productName.toString().trim();
-
-                    // 🔹 Default fallback if empty
-                    if(product.isEmpty()){
-                        product = "Unknown Product";
-                    }
-
-                    // 🔹 Add item (NO SKIPPING)
                     InvoiceDetails item = new InvoiceDetails();
                     item.setOrderId(orderId);
-                    item.setProductName(product);
+                    item.setProductName(product.toString().trim());
                     item.setRate(rate);
                     item.setQuantity(qty);
                     item.setAmount(amount);
@@ -155,13 +133,11 @@ public class InvoiceParserService {
                     items.add(item);
 
                 } catch (Exception e){
-                    System.out.println("Handled line with fallback: " + line);
 
-                    // 🔥 EVEN IF ERROR → ADD DEFAULT ENTRY
                     InvoiceDetails item = new InvoiceDetails();
-                    item.setOrderId("UNKNOWN");
-                    item.setProductName("UNKNOWN");
-                    item.setRate((double) 0);
+                    item.setOrderId("ERROR");
+                    item.setProductName("PARSE_FAILED");
+                    item.setRate(0.0);
                     item.setQuantity(0);
                     item.setAmount(0);
 
@@ -180,11 +156,11 @@ public class InvoiceParserService {
         return null;
     }
     private String extractBillNumber(String text){
-        Pattern pattern = Pattern.compile("No[:\\s]+(\\d+)");
+        Pattern pattern = Pattern.compile("(Invoice No|No)[:\\s]+(\\d+)");
         Matcher matcher = pattern.matcher(text);
 
         if(matcher.find()){
-            return matcher.group(1);
+            return matcher.group(2);
         }
         return "UNKNOWN";
     }
@@ -200,7 +176,7 @@ public class InvoiceParserService {
     }
 
     private String extractInvoiceDate(String text){
-        Pattern pattern = Pattern.compile("(\\d{2}/\\d{2}/\\d{2})");
+        Pattern pattern = Pattern.compile("(\\d{2}[-/]\\d{2}[-/]\\d{2,4})");
         Matcher matcher = pattern.matcher(text);
 
         if(matcher.find()){
@@ -211,13 +187,12 @@ public class InvoiceParserService {
 
     private Double extractTotalAmount(String text){
 
-        Pattern pattern = Pattern.compile("Grand Total\\s+(\\d+[\\d]*)");
+        Pattern pattern = Pattern.compile("(Grand Total|Total Amount)\\s+₹?\\s?(\\d+[\\d,]*)");
         Matcher matcher = pattern.matcher(text);
 
         if(matcher.find()){
-            return Double.parseDouble(matcher.group(1));
+            return Double.parseDouble(matcher.group(2).replace(",", ""));
         }
-
         return 0.0;
     }
 
