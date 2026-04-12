@@ -70,14 +70,16 @@ public class InvoiceController {
         );
         return invoices;
     }
-    @GetMapping("/invoices/{invoiceNumber}")
-    public List<Invoice> getInvoiceByNumber(@PathVariable String invoiceNumber){
+    @GetMapping("/invoices/search/{value}")
+    public List<Invoice> searchInvoices(@PathVariable String value){
 
-        List<Invoice> invoices = invoiceRepository.findByInvoiceNumber(invoiceNumber);
+        List<Invoice> invoices = invoiceRepository.searchInvoices(value);
 
         invoices.forEach(i ->
                 System.out.println("Filtered -> ID: " + i.getId() +
-                        " InvoiceNumber: " + i.getInvoiceNumber())
+                        " InvoiceNumber: " + i.getInvoiceNumber() +
+                        " SystemInvoice: " + i.getSystemInvoiceNumber() +
+                        " Company: " + i.getCompanyName())
         );
 
         return invoices;
